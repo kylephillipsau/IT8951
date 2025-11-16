@@ -43,18 +43,25 @@
 //! - [`display`] - Display operations (coming in Phase 4)
 //! - [`graphics`] - Drawing primitives (coming in Phase 5)
 //!
-//! # Phase 1 Status
+//! # Implementation Status
 //!
-//! This is Phase 1 (Foundation) of the implementation. Currently available:
+//! ## Phase 1: Foundation ✅ COMPLETE
 //!
 //! - ✅ Error types and handling
 //! - ✅ HAL traits for SPI and GPIO
 //! - ✅ Mock HAL implementations for testing
 //! - ✅ Core data structures (Area, DeviceInfo, DisplayMode, etc.)
 //!
-//! Coming in future phases:
+//! ## Phase 2: Protocol Layer ✅ COMPLETE
 //!
-//! - 🔄 Protocol layer (Phase 2)
+//! - ✅ Command and register definitions
+//! - ✅ Low-level SPI transport with preambles
+//! - ✅ Hardware ready synchronization
+//! - ✅ Register read/write operations
+//! - ✅ Batch data transfer support
+//!
+//! ## Coming Soon
+//!
 //! - 🔄 Device initialization and management (Phase 3)
 //! - 🔄 Display operations (Phase 4)
 //! - 🔄 Graphics primitives (Phase 5)
@@ -64,11 +71,13 @@
 
 pub mod error;
 pub mod hal;
+pub mod protocol;
 pub mod types;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
 pub use hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
+pub use protocol::{Command, Register, Transport, UserCommand};
 pub use types::{Area, DeviceInfo, DisplayMode, Endian, LoadImageInfo, PixelFormat, Rotation};
 
 // Re-export mock implementations for testing
