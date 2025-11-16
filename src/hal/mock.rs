@@ -1,8 +1,7 @@
 //! Mock HAL implementations for testing.
 
-use crate::error::{Error, Result};
-use crate::hal::{InputPin, OutputPin, PinState, SpiInterface, SpiTransfer, SpiMode, BitOrder};
-use std::cell::RefCell;
+use crate::error::Result;
+use crate::hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
 use std::sync::{Arc, Mutex};
 
 /// Mock SPI interface for testing.
@@ -146,7 +145,7 @@ pub struct MockOutputPin {
 impl MockOutputPin {
     /// Creates a new mock output pin with the specified initial state.
     pub fn new(initial_state: PinState) -> Self {
-        let mut pin = Self {
+        let pin = Self {
             state: Arc::new(Mutex::new(initial_state)),
             history: Arc::new(Mutex::new(Vec::new())),
         };

@@ -39,7 +39,8 @@ pub trait InputPin {
 
     /// Reads the pin state.
     fn read(&self) -> Result<PinState> {
-        self.is_high().map(|high| if high { PinState::High } else { PinState::Low })
+        self.is_high()
+            .map(|high| if high { PinState::High } else { PinState::Low })
     }
 }
 
@@ -75,7 +76,7 @@ mod tests {
 
     #[test]
     fn test_bool_from_pin_state() {
-        assert_eq!(bool::from(PinState::High), true);
-        assert_eq!(bool::from(PinState::Low), false);
+        assert!(bool::from(PinState::High));
+        assert!(!bool::from(PinState::Low));
     }
 }

@@ -68,17 +68,12 @@ pub mod types;
 
 // Re-export commonly used types
 pub use error::{Error, Result};
-pub use types::{
-    Area, DeviceInfo, DisplayMode, Endian, LoadImageInfo, PixelFormat, Rotation,
-};
-pub use hal::{
-    InputPin, OutputPin, PinState, SpiInterface, SpiTransfer,
-    SpiMode, BitOrder,
-};
+pub use hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
+pub use types::{Area, DeviceInfo, DisplayMode, Endian, LoadImageInfo, PixelFormat, Rotation};
 
 // Re-export mock implementations for testing
 #[cfg(test)]
-pub use hal::mock::{MockSpi, MockInputPin, MockOutputPin};
+pub use hal::mock::{MockInputPin, MockOutputPin, MockSpi};
 
 #[cfg(test)]
 mod tests {

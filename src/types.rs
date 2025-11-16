@@ -89,7 +89,12 @@ pub struct Area {
 impl Area {
     /// Creates a new area.
     pub fn new(x: u16, y: u16, width: u16, height: u16) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Returns true if the area is valid for the given display dimensions.

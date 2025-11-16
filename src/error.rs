@@ -75,7 +75,10 @@ mod tests {
     #[test]
     fn test_error_display() {
         let err = Error::Timeout(1000);
-        assert_eq!(err.to_string(), "Timeout waiting for device ready after 1000ms");
+        assert_eq!(
+            err.to_string(),
+            "Timeout waiting for device ready after 1000ms"
+        );
 
         let err = Error::InvalidParameter("test");
         assert_eq!(err.to_string(), "Invalid parameter: test");
