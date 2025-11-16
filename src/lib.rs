@@ -41,7 +41,7 @@
 //! - [`protocol`] - IT8951 communication protocol
 //! - [`device`] - Device management and initialization
 //! - [`display`] - Display operations
-//! - [`graphics`] - Drawing primitives (coming in Phase 5)
+//! - [`graphics`] - Drawing primitives and framebuffer
 //!
 //! # Implementation Status
 //!
@@ -75,9 +75,17 @@
 //! - ✅ Image loading with format validation
 //! - ✅ Pixel packing for efficient transfer
 //!
+//! ## Phase 5: Graphics Layer ✅ COMPLETE
+//!
+//! - ✅ Framebuffer for in-memory drawing
+//! - ✅ Line drawing (Bresenham's algorithm)
+//! - ✅ Rectangle drawing (filled and outline)
+//! - ✅ Circle drawing (midpoint algorithm)
+//! - ✅ Display integration for framebuffer rendering
+//!
 //! ## Coming Soon
 //!
-//! - 🔄 Graphics primitives (Phase 5)
+//! - 🔄 Advanced features (Phase 6-7)
 
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
@@ -85,6 +93,7 @@
 pub mod device;
 pub mod display;
 pub mod error;
+pub mod graphics;
 pub mod hal;
 pub mod protocol;
 pub mod types;
@@ -92,6 +101,7 @@ pub mod types;
 // Re-export commonly used types
 pub use device::{IT8951, IT8951Builder};
 pub use error::{Error, Result};
+pub use graphics::Framebuffer;
 pub use hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
 pub use protocol::{Command, Register, Transport, UserCommand};
 pub use types::{Area, DeviceInfo, DisplayMode, Endian, LoadImageInfo, PixelFormat, Rotation};
