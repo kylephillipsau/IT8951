@@ -34,9 +34,9 @@ use std::time::Duration;
 /// ```
 #[derive(Debug)]
 pub struct IT8951<SPI, HRDY, CS, RESET> {
-    transport: Transport<SPI, HRDY, CS>,
+    pub(crate) transport: Transport<SPI, HRDY, CS>,
     reset: RESET,
-    device_info: Option<DeviceInfo>,
+    pub(crate) device_info: Option<DeviceInfo>,
     vcom: u16,
 }
 
