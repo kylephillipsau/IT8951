@@ -38,8 +38,8 @@
 //! - [`hal`] - Hardware abstraction layer (SPI, GPIO)
 //! - [`error`] - Error types and Result aliases
 //! - [`types`] - Core data structures
-//! - [`protocol`] - IT8951 communication protocol (coming in Phase 2)
-//! - [`device`] - Device management and initialization (coming in Phase 3)
+//! - [`protocol`] - IT8951 communication protocol
+//! - [`device`] - Device management and initialization
 //! - [`display`] - Display operations (coming in Phase 4)
 //! - [`graphics`] - Drawing primitives (coming in Phase 5)
 //!
@@ -60,21 +60,30 @@
 //! - ✅ Register read/write operations
 //! - ✅ Batch data transfer support
 //!
+//! ## Phase 3: Device Management ✅ COMPLETE
+//!
+//! - ✅ IT8951 device struct with builder pattern
+//! - ✅ Device initialization and hardware reset
+//! - ✅ Device information retrieval
+//! - ✅ VCOM voltage configuration
+//! - ✅ Power state management (run/standby/sleep)
+//!
 //! ## Coming Soon
 //!
-//! - 🔄 Device initialization and management (Phase 3)
 //! - 🔄 Display operations (Phase 4)
 //! - 🔄 Graphics primitives (Phase 5)
 
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
 
+pub mod device;
 pub mod error;
 pub mod hal;
 pub mod protocol;
 pub mod types;
 
 // Re-export commonly used types
+pub use device::{IT8951, IT8951Builder};
 pub use error::{Error, Result};
 pub use hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
 pub use protocol::{Command, Register, Transport, UserCommand};
