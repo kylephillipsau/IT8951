@@ -4,7 +4,7 @@
 //!
 //! Run with: cargo run --example clear_display
 
-use it8951::{DisplayMode, IT8951};
+use it8951::{DisplayMode, IT8951Builder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("IT8951 E-Paper Display Test");
@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the display with default settings
     // VCOM should match your display (check label on flex cable)
-    let mut display = IT8951::builder()
+    let mut display = IT8951Builder::new()
         .vcom(1500)  // -1.50V, adjust for your display
         .build()?;
 
