@@ -4,10 +4,12 @@
 //! the IT8951 driver to work with different hardware implementations.
 
 pub mod gpio;
+pub mod linux;
 pub mod spi;
 
 #[cfg(test)]
 pub mod mock;
 
 pub use self::gpio::{InputPin, OutputPin, PinState};
+pub use self::linux::{LinuxInputPin, LinuxOutputPin, LinuxSpi};
 pub use self::spi::{BitOrder, SpiInterface, SpiMode, SpiTransfer};

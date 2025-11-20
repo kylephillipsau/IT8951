@@ -1,9 +1,9 @@
 //! Builder pattern for IT8951 device construction.
 
-#[cfg(test)]
 use crate::device::IT8951;
-#[cfg(test)]
 use crate::error::{Error, Result};
+use crate::hal::linux::{pins, speed, LinuxInputPin, LinuxOutputPin, LinuxSpi};
+use crate::hal::PinState;
 
 /// Builder for constructing an IT8951 device.
 ///
@@ -48,12 +48,54 @@ impl IT8951Builder {
     }
 
     /// Validates the builder configuration.
-    #[cfg(test)]
     fn validate(&self) -> Result<()> {
         if self.vcom > 5000 {
             return Err(Error::InvalidVcom(self.vcom));
         }
         Ok(())
+    }
+
+    /// Builds an IT8951 device with real Linux hardware.
+    ///
+    /// Uses default SPI device `/dev/spidev0.0` and default GPIO pins.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use it8951::IT8951;
+    ///
+    /// let mut display = IT8951::builder()
+    ///     .vcom(1500)
+    ///     .build()?;
+    ///
+    /// display.init()?;
+    /// ```
+    pub fn build(self) -> Result<IT8951<LinuxSpi, LinuxInputPin, LinuxOutputPin, LinuxOutputPin>> {
+        self.build_with_spi("/dev/spidev0.0")
+    }
+
+    /// Builds an IT8951 device with a custom SPI device path.
+    ///
+    /// # Arguments
+    ///
+    /// * `spi_path` - Path to SPI device (e.g., "/dev/spidev0.0")
+    pub fn build_with_spi(
+        self,
+        spi_path: &str,
+    ) -> Result<IT8951<LinuxSpi, LinuxInputPin, LinuxOutputPin, LinuxOutputPin>> {
+        self.validate()?;
+
+        let gpio_chip = "/dev/gpiochip0";
+
+        // Initialize SPI at data speed (will switch to command speed as needed)
+        let spi = LinuxSpi::new(spi_path, speed::DATA_HZ)?;
+
+        // Initialize GPIO pins
+        let hrdy = LinuxInputPin::new(gpio_chip, pins::HRDY)?;
+        let cs = LinuxOutputPin::new(gpio_chip, pins::CS, PinState::High)?;
+        let reset = LinuxOutputPin::new(gpio_chip, pins::RST, PinState::High)?;
+
+        Ok(IT8951::new(spi, hrdy, cs, reset, self.vcom))
     }
 
     /// Builds an IT8951 device with mock hardware (for testing).

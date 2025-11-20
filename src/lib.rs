@@ -102,7 +102,10 @@ pub mod types;
 pub use device::{IT8951, IT8951Builder};
 pub use error::{Error, Result};
 pub use graphics::Framebuffer;
-pub use hal::{BitOrder, InputPin, OutputPin, PinState, SpiInterface, SpiMode, SpiTransfer};
+pub use hal::{
+    BitOrder, InputPin, LinuxInputPin, LinuxOutputPin, LinuxSpi, OutputPin, PinState, SpiInterface,
+    SpiMode, SpiTransfer,
+};
 pub use protocol::{Command, Register, Transport, UserCommand};
 pub use types::{Area, DeviceInfo, DisplayMode, Endian, LoadImageInfo, PixelFormat, Rotation};
 
