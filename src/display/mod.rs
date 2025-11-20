@@ -104,9 +104,10 @@ where
         let addr_high = (addr >> 16) as u16;
         let addr_low = (addr & 0xFFFF) as u16;
 
-        // Write to LISAR and LISAR+2 registers
-        self.transport.write_register(crate::protocol::Register::new(0x0208), addr_low)?;
+        // Write to LISAR+2 (high word) then LISAR (low word)
+        // This order matches the C implementation
         self.transport.write_register(crate::protocol::Register::new(0x020A), addr_high)?;
+        self.transport.write_register(crate::protocol::Register::new(0x0208), addr_low)?;
 
         // Build argument word
         let arg = ((load_info.endian.as_u16()) << 8)
