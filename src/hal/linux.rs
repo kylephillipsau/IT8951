@@ -21,10 +21,11 @@ impl LinuxSpi {
     pub fn new(path: &str, speed_hz: u32) -> Result<Self> {
         let mut spi = Spidev::open(path).map_err(Error::Io)?;
 
+        // Disable automatic CS control - we manage it manually
         let options = SpidevOptions::new()
             .bits_per_word(8)
             .max_speed_hz(speed_hz)
-            .mode(SpiModeFlags::SPI_MODE_0)
+            .mode(SpiModeFlags::SPI_MODE_0 | SpiModeFlags::SPI_NO_CS)
             .build();
 
         spi.configure(&options).map_err(Error::Io)?;
