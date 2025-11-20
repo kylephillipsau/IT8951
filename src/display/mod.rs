@@ -71,6 +71,9 @@ where
         // Load image area command
         self.load_image_area_start(&load_info, area)?;
 
+        // Wait for device to be ready before sending pixel data
+        self.wait_display_ready()?;
+
         // Write the fill data (packed pixels)
         let pixels_per_word = 2; // 8bpp = 2 pixels per 16-bit word
         let total_pixels = area.pixel_count();

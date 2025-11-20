@@ -21,11 +21,11 @@ impl LinuxSpi {
     pub fn new(path: &str, speed_hz: u32) -> Result<Self> {
         let mut spi = Spidev::open(path).map_err(Error::Io)?;
 
-        // Disable automatic CS control - we manage it manually
+        // Let the SPI driver handle CS automatically
         let options = SpidevOptions::new()
             .bits_per_word(8)
             .max_speed_hz(speed_hz)
-            .mode(SpiModeFlags::SPI_MODE_0 | SpiModeFlags::SPI_NO_CS)
+            .mode(SpiModeFlags::SPI_MODE_0)
             .build();
 
         spi.configure(&options).map_err(Error::Io)?;
@@ -159,11 +159,26 @@ impl InputPin for LinuxInputPin {
     }
 }
 
+/// No-op output pin (for CS which is handled by SPI driver).
+#[derive(Debug)]
+pub struct NoOpOutputPin;
+
+impl OutputPin for NoOpOutputPin {
+    fn set_high(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_low(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn toggle(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// Default GPIO pin numbers for Waveshare e-Paper HAT.
 pub mod pins {
-    /// Chip Select pin (GPIO 8, active low)
-    pub const CS: u32 = 8;
-
     /// Host Ready pin (GPIO 24, active high when ready)
     pub const HRDY: u32 = 24;
 
@@ -173,9 +188,10 @@ pub mod pins {
 
 /// Default SPI speeds.
 pub mod speed {
-    /// Speed for commands (1 MHz)
+    /// Speed for commands (1 MHz) - use this for all communication
+    /// Higher speeds can cause communication failures
     pub const COMMAND_HZ: u32 = 1_000_000;
 
-    /// Speed for data transfers (24 MHz)
+    /// Speed for data transfers (24 MHz) - can be used for pixel data
     pub const DATA_HZ: u32 = 24_000_000;
 }

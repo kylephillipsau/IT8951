@@ -79,8 +79,8 @@ where
         // Perform hardware reset
         self.reset()?;
 
-        // Wait for device to be ready after reset
-        std::thread::sleep(Duration::from_millis(100));
+        // Wait for device to be ready after reset (can take up to 2 seconds)
+        std::thread::sleep(Duration::from_millis(2000));
 
         // Get device information
         let device_info = self.get_device_info()?;

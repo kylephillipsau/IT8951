@@ -27,9 +27,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Image buffer: 0x{:08X}", info.img_buf_addr);
     }
 
-    // Clear to white
+    // Read and display current VCOM
+    let current_vcom = display.read_vcom()?;
+    println!("Current VCOM: {} (-{:.2}V)", current_vcom, current_vcom as f32 / 1000.0);
+
+    // Wait for display to be ready before loading
+    println!("Waiting for display ready...");
+    display.wait_display_ready()?;
+
+    // Clear to white (0xF0 is white in 8bpp)
     println!("Clearing display to white...");
-    display.clear(0xFF)?;
+    display.clear(0xF0)?;
 
     // Refresh with Init mode (clears ghosting)
     println!("Refreshing display (Init mode)...");

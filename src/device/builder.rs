@@ -2,7 +2,7 @@
 
 use crate::device::IT8951;
 use crate::error::{Error, Result};
-use crate::hal::linux::{pins, speed, LinuxInputPin, LinuxOutputPin, LinuxSpi};
+use crate::hal::linux::{pins, speed, LinuxInputPin, LinuxOutputPin, LinuxSpi, NoOpOutputPin};
 use crate::hal::PinState;
 
 /// Builder for constructing an IT8951 device.
@@ -70,7 +70,7 @@ impl IT8951Builder {
     ///
     /// display.init()?;
     /// ```
-    pub fn build(self) -> Result<IT8951<LinuxSpi, LinuxInputPin, LinuxOutputPin, LinuxOutputPin>> {
+    pub fn build(self) -> Result<IT8951<LinuxSpi, LinuxInputPin, NoOpOutputPin, LinuxOutputPin>> {
         self.build_with_spi("/dev/spidev0.0")
     }
 
@@ -82,17 +82,17 @@ impl IT8951Builder {
     pub fn build_with_spi(
         self,
         spi_path: &str,
-    ) -> Result<IT8951<LinuxSpi, LinuxInputPin, LinuxOutputPin, LinuxOutputPin>> {
+    ) -> Result<IT8951<LinuxSpi, LinuxInputPin, NoOpOutputPin, LinuxOutputPin>> {
         self.validate()?;
 
         let gpio_chip = "/dev/gpiochip0";
 
-        // Initialize SPI at data speed (will switch to command speed as needed)
-        let spi = LinuxSpi::new(spi_path, speed::DATA_HZ)?;
+        // Initialize SPI at data speed
+        let spi = LinuxSpi::new(spi_path, speed::COMMAND_HZ)?;
 
-        // Initialize GPIO pins
+        // Initialize GPIO pins (CS is handled by SPI driver, so we use NoOp)
         let hrdy = LinuxInputPin::new(gpio_chip, pins::HRDY)?;
-        let cs = LinuxOutputPin::new(gpio_chip, pins::CS, PinState::High)?;
+        let cs = NoOpOutputPin;
         let reset = LinuxOutputPin::new(gpio_chip, pins::RST, PinState::High)?;
 
         Ok(IT8951::new(spi, hrdy, cs, reset, self.vcom))

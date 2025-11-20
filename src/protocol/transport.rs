@@ -29,7 +29,8 @@ const DEFAULT_TIMEOUT_MS: u64 = 5000;
 pub struct Transport<SPI, HRDY, CS> {
     spi: SPI,
     hrdy: HRDY,
-    cs: CS,
+    #[allow(dead_code)]
+    cs: CS, // Kept for future manual CS support; currently SPI driver handles CS
     timeout: Duration,
 }
 
@@ -71,66 +72,32 @@ where
         Ok(())
     }
 
-    /// Writes a 16-bit value as two bytes (big-endian).
-    fn write_u16(&mut self, value: u16) -> Result<()> {
-        let mut buf = [0u8; 2];
-        BigEndian::write_u16(&mut buf, value);
-
-        self.spi.transfer_byte(buf[0])?;
-        self.spi.transfer_byte(buf[1])?;
-
+    /// Writes a buffer of 16-bit values in a single SPI transfer.
+    /// The SPI driver handles CS automatically per transfer.
+    fn write_words(&mut self, words: &[u16]) -> Result<()> {
+        let mut buf = vec![0u8; words.len() * 2];
+        for (i, &word) in words.iter().enumerate() {
+            BigEndian::write_u16(&mut buf[i * 2..], word);
+        }
+        self.spi.transfer(&buf)?;
         Ok(())
-    }
-
-    /// Reads a 16-bit value as two bytes (big-endian).
-    fn read_u16(&mut self) -> Result<u16> {
-        let high = self.spi.transfer_byte(0x00)?;
-        let low = self.spi.transfer_byte(0x00)?;
-
-        Ok(((high as u16) << 8) | (low as u16))
     }
 
     /// Writes a command code to the device.
     ///
     /// # Protocol
     /// 1. Wait for ready
-    /// 2. Assert CS low
-    /// 3. Send write command preamble (0x6000)
-    /// 4. Wait for ready
-    /// 5. Send command code
-    /// 6. De-assert CS high
+    /// 2. Send preamble (0x6000) + command in one transfer
     pub fn write_command(&mut self, cmd: Command) -> Result<()> {
         self.wait_ready()?;
-
-        self.cs.set_low()?;
-
-        // Send preamble for write command
-        self.write_u16(PREAMBLE_WRITE_CMD)?;
-
-        self.wait_ready()?;
-
-        // Send command code
-        self.write_u16(cmd.as_u16())?;
-
-        self.cs.set_high()?;
-
+        self.write_words(&[PREAMBLE_WRITE_CMD, cmd.as_u16()])?;
         Ok(())
     }
 
     /// Writes a user command code to the device.
     pub fn write_user_command(&mut self, cmd: UserCommand) -> Result<()> {
         self.wait_ready()?;
-
-        self.cs.set_low()?;
-
-        self.write_u16(PREAMBLE_WRITE_CMD)?;
-
-        self.wait_ready()?;
-
-        self.write_u16(cmd.as_u16())?;
-
-        self.cs.set_high()?;
-
+        self.write_words(&[PREAMBLE_WRITE_CMD, cmd.as_u16()])?;
         Ok(())
     }
 
@@ -138,143 +105,111 @@ where
     ///
     /// # Protocol
     /// 1. Wait for ready
-    /// 2. Assert CS low
-    /// 3. Send write data preamble (0x0000)
-    /// 4. Wait for ready
-    /// 5. Send data
-    /// 6. De-assert CS high
+    /// 2. Send preamble (0x0000) + data in one transfer
     pub fn write_data(&mut self, data: u16) -> Result<()> {
         self.wait_ready()?;
-
-        self.cs.set_low()?;
-
-        // Send preamble for write data
-        self.write_u16(PREAMBLE_WRITE_DATA)?;
-
-        self.wait_ready()?;
-
-        // Send data
-        self.write_u16(data)?;
-
-        self.cs.set_high()?;
-
+        self.write_words(&[PREAMBLE_WRITE_DATA, data])?;
         Ok(())
     }
 
     /// Writes multiple 16-bit data values to the device.
     ///
-    /// More efficient than calling write_data repeatedly.
+    /// Sends preamble + data, chunking large transfers to fit SPI buffer limit.
     pub fn write_data_batch(&mut self, data: &[u16]) -> Result<()> {
-        self.wait_ready()?;
-
-        self.cs.set_low()?;
-
-        // Send preamble for write data
-        self.write_u16(PREAMBLE_WRITE_DATA)?;
+        const MAX_CHUNK_WORDS: usize = 2047; // 4096 bytes / 2 - 1 for preamble
 
         self.wait_ready()?;
 
-        // Send all data values
-        for &value in data {
-            self.write_u16(value)?;
+        // First chunk includes preamble
+        let first_chunk_size = data.len().min(MAX_CHUNK_WORDS);
+        let mut words = Vec::with_capacity(first_chunk_size + 1);
+        words.push(PREAMBLE_WRITE_DATA);
+        words.extend_from_slice(&data[..first_chunk_size]);
+        self.write_words(&words)?;
+
+        // Remaining chunks
+        let mut offset = first_chunk_size;
+        while offset < data.len() {
+            let chunk_size = (data.len() - offset).min(MAX_CHUNK_WORDS);
+            let mut chunk = Vec::with_capacity(chunk_size + 1);
+            chunk.push(PREAMBLE_WRITE_DATA);
+            chunk.extend_from_slice(&data[offset..offset + chunk_size]);
+            self.write_words(&chunk)?;
+            offset += chunk_size;
         }
-
-        self.cs.set_high()?;
 
         Ok(())
     }
 
     /// Reads a 16-bit data value from the device.
     ///
-    /// # Protocol
-    /// 1. Wait for ready
-    /// 2. Assert CS low
-    /// 3. Send read data preamble (0x1000)
-    /// 4. Wait for ready
-    /// 5. Send two dummy bytes
-    /// 6. Wait for ready
-    /// 7. Read data (2 bytes)
-    /// 8. De-assert CS high
+    /// Sends preamble + dummy bytes and reads response in one transfer.
     pub fn read_data(&mut self) -> Result<u16> {
         self.wait_ready()?;
 
-        self.cs.set_low()?;
+        // Send preamble + dummy bytes, receive data
+        // Format: [preamble_hi, preamble_lo, dummy, dummy, data_hi, data_lo]
+        let tx = [
+            (PREAMBLE_READ_DATA >> 8) as u8,
+            (PREAMBLE_READ_DATA & 0xFF) as u8,
+            0x00, 0x00, // dummy bytes
+            0x00, 0x00, // will be read
+        ];
+        let rx = self.spi.transfer(&tx)?;
 
-        // Send preamble for read data
-        self.write_u16(PREAMBLE_READ_DATA)?;
-
-        self.wait_ready()?;
-
-        // Send dummy bytes
-        self.spi.transfer_byte(0x00)?;
-        self.spi.transfer_byte(0x00)?;
-
-        self.wait_ready()?;
-
-        // Read data
-        let data = self.read_u16()?;
-
-        self.cs.set_high()?;
-
+        // Data is in last 2 bytes
+        let data = ((rx[4] as u16) << 8) | (rx[5] as u16);
         Ok(data)
     }
 
     /// Reads multiple 16-bit data values from the device.
     ///
-    /// More efficient than calling read_data repeatedly.
+    /// Sends preamble + dummy bytes and reads all data in one transfer.
     pub fn read_data_batch(&mut self, count: usize) -> Result<Vec<u16>> {
+        self.wait_ready()?;
+
+        // Build transmit buffer: preamble + dummy + space for data
+        let tx_len = 2 + 2 + count * 2; // preamble + dummy + data
+        let mut tx = vec![0u8; tx_len];
+        tx[0] = (PREAMBLE_READ_DATA >> 8) as u8;
+        tx[1] = (PREAMBLE_READ_DATA & 0xFF) as u8;
+
+        let rx = self.spi.transfer(&tx)?;
+
+        // Parse data from response (starts at byte 4)
         let mut result = Vec::with_capacity(count);
-
-        self.wait_ready()?;
-
-        self.cs.set_low()?;
-
-        // Send preamble for read data
-        self.write_u16(PREAMBLE_READ_DATA)?;
-
-        self.wait_ready()?;
-
-        // Send dummy bytes
-        self.spi.transfer_byte(0x00)?;
-        self.spi.transfer_byte(0x00)?;
-
-        self.wait_ready()?;
-
-        // Read all data values
-        for _ in 0..count {
-            result.push(self.read_u16()?);
+        for i in 0..count {
+            let offset = 4 + i * 2;
+            let word = ((rx[offset] as u16) << 8) | (rx[offset + 1] as u16);
+            result.push(word);
         }
-
-        self.cs.set_high()?;
 
         Ok(result)
     }
 
     /// Writes a command with arguments.
     ///
-    /// Sends the command code followed by the argument data words.
+    /// Sends the command code followed by each argument with its own preamble.
     pub fn write_command_with_args(&mut self, cmd: Command, args: &[u16]) -> Result<()> {
         self.write_command(cmd)?;
-
         for &arg in args {
             self.write_data(arg)?;
         }
-
         Ok(())
     }
 
     /// Writes a user command with arguments.
+    ///
+    /// Sends the command code followed by each argument with its own preamble.
     pub fn write_user_command_with_args(
         &mut self,
         cmd: UserCommand,
         args: &[u16],
     ) -> Result<()> {
         self.write_user_command(cmd)?;
-
         for &arg in args {
             self.write_data(arg)?;
         }
-
         Ok(())
     }
 
@@ -318,14 +253,11 @@ mod tests {
 
         transport.write_command(Command::SysRun).unwrap();
 
-        // Verify CS was toggled
-        let history = transport.cs.get_history();
-        assert!(history.contains(&PinState::Low));
-        assert!(history.contains(&PinState::High));
-
-        // Verify SPI transfers
+        // Verify SPI transfer contains preamble + command
         let transfers = transport.spi.get_transfers();
-        assert!(!transfers.is_empty());
+        assert_eq!(transfers.len(), 1);
+        // Should be 4 bytes: preamble (0x6000) + command
+        assert_eq!(transfers[0].len(), 4);
     }
 
     #[test]
@@ -396,14 +328,13 @@ mod tests {
     fn test_read_register() {
         let mut transport = setup_transport();
 
-        // RegRead command: cmd preamble (2) + cmd (2) + addr preamble (2) + addr (2)
-        // + read preamble (2) + dummy (2) + data (2) = 14 bytes total
-        transport.spi.add_response(vec![
-            0x00, 0x00, 0x00, 0x00, // command
-            0x00, 0x00, 0x00, 0x00, // address
-            0x00, 0x00, 0x00, 0x00, // read preamble + dummy
-            0x12, 0x34, // actual data
-        ]);
+        // Each operation is a separate transfer:
+        // 1. Command (preamble + RegRead) - 4 bytes
+        // 2. Address (preamble + addr) - 4 bytes
+        // 3. Read (preamble + dummy + data) - 6 bytes
+        transport.spi.add_response(vec![0x00; 4]); // command response
+        transport.spi.add_response(vec![0x00; 4]); // address response
+        transport.spi.add_response(vec![0x00, 0x00, 0x00, 0x00, 0x12, 0x34]); // read response
 
         let result = transport.read_register(Register::I80CPCR).unwrap();
         assert_eq!(result, 0x1234);
