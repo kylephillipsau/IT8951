@@ -98,6 +98,16 @@ where
 
     /// Starts loading an image area.
     fn load_image_area_start(&mut self, load_info: &LoadImageInfo, area: &Area) -> Result<()> {
+        // Set the image buffer base address (LISAR register)
+        // Split 32-bit address into two 16-bit words
+        let addr = load_info.img_buf_base_addr;
+        let addr_high = (addr >> 16) as u16;
+        let addr_low = (addr & 0xFFFF) as u16;
+
+        // Write to LISAR and LISAR+2 registers
+        self.transport.write_register(crate::protocol::Register::new(0x0208), addr_low)?;
+        self.transport.write_register(crate::protocol::Register::new(0x020A), addr_high)?;
+
         // Build argument word
         let arg = ((load_info.endian.as_u16()) << 8)
             | ((load_info.pixel_format.as_u16()) << 4)
