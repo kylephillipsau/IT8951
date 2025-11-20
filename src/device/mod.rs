@@ -84,7 +84,14 @@ where
 
         // Get device information
         let device_info = self.get_device_info()?;
+        let img_buf_addr = device_info.img_buf_addr;
         self.device_info = Some(device_info);
+
+        // Set image buffer base address (required before any image operations)
+        let addr_high = (img_buf_addr >> 16) as u16;
+        let addr_low = (img_buf_addr & 0xFFFF) as u16;
+        self.transport.write_register(Register::new(0x020A), addr_high)?;
+        self.transport.write_register(Register::new(0x0208), addr_low)?;
 
         // Enable I80 packed mode
         self.transport
