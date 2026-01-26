@@ -85,56 +85,63 @@ where
 
     /// Writes a command code to the device.
     ///
-    /// # Protocol
+    /// # Protocol (matching Waveshare C reference)
     /// 1. Wait for ready
-    /// 2. Send preamble (0x6000) + command in one transfer
+    /// 2. Send preamble (0x6000)
+    /// 3. Wait for ready again
+    /// 4. Send command code
     pub fn write_command(&mut self, cmd: Command) -> Result<()> {
         self.wait_ready()?;
-        self.write_words(&[PREAMBLE_WRITE_CMD, cmd.as_u16()])?;
+        self.write_words(&[PREAMBLE_WRITE_CMD])?;
+        self.wait_ready()?;
+        self.write_words(&[cmd.as_u16()])?;
         Ok(())
     }
 
     /// Writes a user command code to the device.
     pub fn write_user_command(&mut self, cmd: UserCommand) -> Result<()> {
         self.wait_ready()?;
-        self.write_words(&[PREAMBLE_WRITE_CMD, cmd.as_u16()])?;
+        self.write_words(&[PREAMBLE_WRITE_CMD])?;
+        self.wait_ready()?;
+        self.write_words(&[cmd.as_u16()])?;
         Ok(())
     }
 
     /// Writes a 16-bit data value to the device.
     ///
-    /// # Protocol
+    /// # Protocol (matching Waveshare C reference)
     /// 1. Wait for ready
-    /// 2. Send preamble (0x0000) + data in one transfer
+    /// 2. Send preamble (0x0000)
+    /// 3. Wait for ready again
+    /// 4. Send data
     pub fn write_data(&mut self, data: u16) -> Result<()> {
         self.wait_ready()?;
-        self.write_words(&[PREAMBLE_WRITE_DATA, data])?;
+        self.write_words(&[PREAMBLE_WRITE_DATA])?;
+        self.wait_ready()?;
+        self.write_words(&[data])?;
         Ok(())
     }
 
     /// Writes multiple 16-bit data values to the device.
     ///
-    /// Sends preamble + data, chunking large transfers to fit SPI buffer limit.
+    /// Following the IT8951 protocol: send preamble, wait for ready, then send data.
+    /// This matches the Waveshare C reference implementation which waits after
+    /// the preamble before sending pixel data.
     pub fn write_data_batch(&mut self, data: &[u16]) -> Result<()> {
-        const MAX_CHUNK_WORDS: usize = 2047; // 4096 bytes / 2 - 1 for preamble
+        const MAX_CHUNK_WORDS: usize = 2048; // Max words per transfer
 
+        // Send preamble first
+        self.wait_ready()?;
+        self.write_words(&[PREAMBLE_WRITE_DATA])?;
+
+        // Wait for device to be ready after preamble (critical for IT8951)
         self.wait_ready()?;
 
-        // First chunk includes preamble
-        let first_chunk_size = data.len().min(MAX_CHUNK_WORDS);
-        let mut words = Vec::with_capacity(first_chunk_size + 1);
-        words.push(PREAMBLE_WRITE_DATA);
-        words.extend_from_slice(&data[..first_chunk_size]);
-        self.write_words(&words)?;
-
-        // Remaining chunks
-        let mut offset = first_chunk_size;
+        // Send data in chunks
+        let mut offset = 0;
         while offset < data.len() {
             let chunk_size = (data.len() - offset).min(MAX_CHUNK_WORDS);
-            let mut chunk = Vec::with_capacity(chunk_size + 1);
-            chunk.push(PREAMBLE_WRITE_DATA);
-            chunk.extend_from_slice(&data[offset..offset + chunk_size]);
-            self.write_words(&chunk)?;
+            self.write_words(&data[offset..offset + chunk_size])?;
             offset += chunk_size;
         }
 
@@ -253,11 +260,12 @@ mod tests {
 
         transport.write_command(Command::SysRun).unwrap();
 
-        // Verify SPI transfer contains preamble + command
+        // Verify SPI transfers: preamble (2 bytes) then command (2 bytes)
+        // Protocol: wait -> preamble -> wait -> command
         let transfers = transport.spi.get_transfers();
-        assert_eq!(transfers.len(), 1);
-        // Should be 4 bytes: preamble (0x6000) + command
-        assert_eq!(transfers[0].len(), 4);
+        assert_eq!(transfers.len(), 2);
+        assert_eq!(transfers[0].len(), 2); // Preamble
+        assert_eq!(transfers[1].len(), 2); // Command
     }
 
     #[test]
@@ -328,12 +336,14 @@ mod tests {
     fn test_read_register() {
         let mut transport = setup_transport();
 
-        // Each operation is a separate transfer:
-        // 1. Command (preamble + RegRead) - 4 bytes
-        // 2. Address (preamble + addr) - 4 bytes
-        // 3. Read (preamble + dummy + data) - 6 bytes
-        transport.spi.add_response(vec![0x00; 4]); // command response
-        transport.spi.add_response(vec![0x00; 4]); // address response
+        // With new protocol (wait after preamble):
+        // 1. write_command(RegRead): preamble (2 bytes), then command (2 bytes)
+        // 2. write_data(addr): preamble (2 bytes), then data (2 bytes)
+        // 3. read_data(): preamble + dummy + data (6 bytes)
+        transport.spi.add_response(vec![0x00; 2]); // command preamble
+        transport.spi.add_response(vec![0x00; 2]); // command code
+        transport.spi.add_response(vec![0x00; 2]); // data preamble
+        transport.spi.add_response(vec![0x00; 2]); // address value
         transport.spi.add_response(vec![0x00, 0x00, 0x00, 0x00, 0x12, 0x34]); // read response
 
         let result = transport.read_register(Register::I80CPCR).unwrap();
