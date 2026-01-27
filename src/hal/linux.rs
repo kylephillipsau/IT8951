@@ -59,6 +59,10 @@ impl SpiTransfer for LinuxSpi {
         }
         Ok(rx_buf)
     }
+
+    fn set_speed(&mut self, speed_hz: u32) -> Result<()> {
+        self.set_speed(speed_hz)
+    }
 }
 
 /// Linux GPIO output pin implementation.

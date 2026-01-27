@@ -369,13 +369,47 @@ impl Framebuffer {
             return Err(Error::InvalidArea(*area));
         }
 
+        let stride = self.width as usize;
+        let w = area.width as usize;
         for y in area.y..area.y + area.height {
-            for x in area.x..area.x + area.width {
-                let index = (y as usize) * (self.width as usize) + (x as usize);
-                self.data[index] = value;
-            }
+            let start = (y as usize) * stride + area.x as usize;
+            self.data[start..start + w].fill(value);
         }
         Ok(())
+    }
+
+    /// Fill a rectangle with a value using direct slice operations (no bounds checking per pixel)
+    ///
+    /// Coordinates are clipped to framebuffer bounds.
+    pub fn fill_rect(&mut self, x: u16, y: u16, w: u16, h: u16, value: u8) {
+        let x_end = (x + w).min(self.width) as usize;
+        let y_end = (y + h).min(self.height) as usize;
+        let x = x.min(self.width) as usize;
+        let y = y.min(self.height) as usize;
+        let stride = self.width as usize;
+
+        for row in y..y_end {
+            let start = row * stride + x;
+            let end = row * stride + x_end;
+            self.data[start..end].fill(value);
+        }
+    }
+
+    /// Scroll the framebuffer up by the given number of pixel rows.
+    ///
+    /// Shifts all pixel data up and fills the newly exposed bottom rows with `fill`.
+    pub fn scroll_up(&mut self, pixel_rows: usize, fill: u8) {
+        let stride = self.width as usize;
+        let total = self.data.len();
+        let offset = pixel_rows * stride;
+
+        if offset >= total {
+            self.data.fill(fill);
+            return;
+        }
+
+        self.data.copy_within(offset..total, 0);
+        self.data[total - offset..].fill(fill);
     }
 }
 

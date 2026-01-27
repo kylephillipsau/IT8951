@@ -95,7 +95,9 @@ impl IT8951Builder {
         let cs = NoOpOutputPin;
         let reset = LinuxOutputPin::new(gpio_chip, pins::RST, PinState::High)?;
 
-        Ok(IT8951::new(spi, hrdy, cs, reset, self.vcom))
+        let mut device = IT8951::new(spi, hrdy, cs, reset, self.vcom);
+        device.transport.set_speeds(speed::COMMAND_HZ, speed::DATA_HZ);
+        Ok(device)
     }
 
     /// Builds an IT8951 device with mock hardware (for testing).

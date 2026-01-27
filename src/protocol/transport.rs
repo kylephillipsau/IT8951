@@ -32,6 +32,8 @@ pub struct Transport<SPI, HRDY, CS> {
     #[allow(dead_code)]
     cs: CS, // Kept for future manual CS support; currently SPI driver handles CS
     timeout: Duration,
+    command_speed_hz: u32,
+    data_speed_hz: u32,
 }
 
 impl<SPI, HRDY, CS> Transport<SPI, HRDY, CS>
@@ -47,7 +49,18 @@ where
             hrdy,
             cs,
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
+            command_speed_hz: 0,
+            data_speed_hz: 0,
         }
+    }
+
+    /// Sets the SPI speeds for command and data transfers.
+    ///
+    /// When both are non-zero, the transport will switch to `data_speed_hz`
+    /// for bulk data transfers and back to `command_speed_hz` afterward.
+    pub fn set_speeds(&mut self, command_speed_hz: u32, data_speed_hz: u32) {
+        self.command_speed_hz = command_speed_hz;
+        self.data_speed_hz = data_speed_hz;
     }
 
     /// Sets the timeout for hardware ready waits.
@@ -116,7 +129,22 @@ where
     ///
     /// Sends preamble + data in chunks, keeping each chunk in a single CS session.
     pub fn write_data_batch(&mut self, data: &[u16]) -> Result<()> {
-        const MAX_CHUNK_WORDS: usize = 2047; // Leave room for preamble
+        let use_fast_speed = self.data_speed_hz > 0 && self.command_speed_hz > 0;
+        if use_fast_speed {
+            self.spi.set_speed(self.data_speed_hz)?;
+        }
+
+        let result = self.write_data_batch_inner(data);
+
+        if use_fast_speed {
+            self.spi.set_speed(self.command_speed_hz)?;
+        }
+
+        result
+    }
+
+    fn write_data_batch_inner(&mut self, data: &[u16]) -> Result<()> {
+        const MAX_CHUNK_WORDS: usize = 2047;
 
         self.wait_ready()?;
 
@@ -193,23 +221,23 @@ where
     /// Sends the command code followed by each argument with its own preamble.
     pub fn write_command_with_args(&mut self, cmd: Command, args: &[u16]) -> Result<()> {
         self.write_command(cmd)?;
-        for &arg in args {
-            self.write_data(arg)?;
+        if !args.is_empty() {
+            self.write_data_batch_inner(args)?;
         }
         Ok(())
     }
 
     /// Writes a user command with arguments.
     ///
-    /// Sends the command code followed by each argument with its own preamble.
+    /// Sends the command code followed by all arguments in a single data batch.
     pub fn write_user_command_with_args(
         &mut self,
         cmd: UserCommand,
         args: &[u16],
     ) -> Result<()> {
         self.write_user_command(cmd)?;
-        for &arg in args {
-            self.write_data(arg)?;
+        if !args.is_empty() {
+            self.write_data_batch_inner(args)?;
         }
         Ok(())
     }

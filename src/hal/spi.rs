@@ -25,6 +25,13 @@ pub trait SpiTransfer {
     ///
     /// Vector of bytes received during the transfer.
     fn transfer(&mut self, buffer: &[u8]) -> Result<Vec<u8>>;
+
+    /// Sets the SPI clock speed in Hz.
+    ///
+    /// Used to switch between slower command speed and faster data transfer speed.
+    fn set_speed(&mut self, _speed_hz: u32) -> Result<()> {
+        Ok(()) // Default no-op
+    }
 }
 
 /// Trait for SPI interface configuration and control.
