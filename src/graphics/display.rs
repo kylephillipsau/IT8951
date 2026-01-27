@@ -76,9 +76,8 @@ where
             )));
         }
 
-        // Pack 8bpp framebuffer to 4bpp (IT8951 only uses top 4 bits anyway)
-        let packed = pack_8bpp_to_4bpp(framebuffer.data());
-        self.load_image(&packed, area, PixelFormat::Bpp4)?;
+        // Load the framebuffer data to the display
+        self.load_image(framebuffer.data(), area, PixelFormat::Bpp8)?;
 
         // Optionally refresh the display
         if refresh {
