@@ -395,6 +395,34 @@ impl Framebuffer {
         }
     }
 
+    /// Scroll a rectangular region of the framebuffer up by the given number of pixel rows.
+    /// Only pixels within (x, y, w, h) are shifted; everything outside is untouched.
+    pub fn scroll_region_up(&mut self, x: u16, y: u16, w: u16, h: u16, pixel_rows: usize, fill: u8) {
+        let stride = self.width as usize;
+        let x = x as usize;
+        let y = y as usize;
+        let w = w as usize;
+        let h = h as usize;
+
+        if pixel_rows >= h {
+            for row in y..y + h {
+                let start = row * stride + x;
+                self.data[start..start + w].fill(fill);
+            }
+            return;
+        }
+
+        for row in y..y + h - pixel_rows {
+            let dst = row * stride + x;
+            let src = (row + pixel_rows) * stride + x;
+            self.data.copy_within(src..src + w, dst);
+        }
+        for row in (y + h - pixel_rows)..y + h {
+            let start = row * stride + x;
+            self.data[start..start + w].fill(fill);
+        }
+    }
+
     /// Scroll the framebuffer up by the given number of pixel rows.
     ///
     /// Shifts all pixel data up and fills the newly exposed bottom rows with `fill`.
