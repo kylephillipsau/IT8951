@@ -236,6 +236,16 @@ where
         }
         Ok(())
     }
+
+    /// Checks if the display is ready (non-blocking).
+    ///
+    /// Returns `true` if all LUT engines are free and a new update can be started.
+    /// This is useful for pipelining operations - you can start capturing the next
+    /// frame while waiting for the current display update to complete.
+    pub fn is_display_ready(&mut self) -> Result<bool> {
+        let status = self.transport.read_register(Register::LUTAFSR)?;
+        Ok(status == 0)
+    }
 }
 
 #[cfg(test)]
