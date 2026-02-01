@@ -154,23 +154,47 @@ impl From<(u16, u16, u16, u16)> for Area {
 }
 
 /// Display refresh modes.
+///
+/// Note: Mode values depend on the display's LUT (waveform) version.
+/// - M641 (6" displays): A2=4
+/// - M841 (9.7" and larger): A2=6, DU4=7
+///
+/// The values here are for M841 firmware (9.7" 1200x825 displays).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum DisplayMode {
-    /// Initialization mode (clears ghosting)
+    /// Initialization mode - clears display to white, removes ghosting
+    /// Use periodically (every 10-30 partial updates) to maintain quality
     Init = 0,
 
-    /// Direct Update (fast monochrome)
+    /// Direct Update - fast black/white only, no flash
+    /// Best for: B/W text, cursor movement
     Du = 1,
 
-    /// Grayscale Clearing (16-level high quality)
+    /// Grayscale Clearing 16 - highest quality 16-level grayscale
+    /// WARNING: Full white flash during update
+    /// Best for: Final quality renders, clearing artifacts
     Gc16 = 2,
 
-    /// Grayscale Level (16-level faster)
+    /// Grayscale 16 - reduced flash on white pixels
+    /// Best for: Grayscale content with white backgrounds
     Gl16 = 3,
 
-    /// Animation mode (very fast)
-    A2 = 4,
+    /// GLR16 - REGAL ghosting reduction (requires preprocessing)
+    /// Note: Without preprocessing, behaves like GL16
+    Glr16 = 4,
+
+    /// GLD16 - REGAL-D further reduced artifacts
+    Gld16 = 5,
+
+    /// Animation mode - very fast (~120ms), black/white only, no flash
+    /// Best for: Cursor, animations, video
+    /// Note: Value is 6 for M841 firmware (9.7"+ displays), 4 for M641 (6" displays)
+    A2 = 6,
+
+    /// DU4 - 4-level grayscale, no flash (~120ms)
+    /// Best for: Anti-aliased text, smooth scrolling
+    Du4 = 7,
 }
 
 impl DisplayMode {
@@ -364,7 +388,10 @@ mod tests {
         assert_eq!(DisplayMode::Du.as_u16(), 1);
         assert_eq!(DisplayMode::Gc16.as_u16(), 2);
         assert_eq!(DisplayMode::Gl16.as_u16(), 3);
-        assert_eq!(DisplayMode::A2.as_u16(), 4);
+        assert_eq!(DisplayMode::Glr16.as_u16(), 4);
+        assert_eq!(DisplayMode::Gld16.as_u16(), 5);
+        assert_eq!(DisplayMode::A2.as_u16(), 6);
+        assert_eq!(DisplayMode::Du4.as_u16(), 7);
     }
 
     #[test]
