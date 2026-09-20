@@ -34,6 +34,8 @@ pub struct Transport<SPI, HRDY, CS> {
     timeout: Duration,
     command_speed_hz: u32,
     data_speed_hz: u32,
+    /// Reusable transmit buffer for bulk pixel writes.
+    tx_buf: Vec<u8>,
 }
 
 impl<SPI, HRDY, CS> Transport<SPI, HRDY, CS>
@@ -51,6 +53,7 @@ where
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             command_speed_hz: 0,
             data_speed_hz: 0,
+            tx_buf: Vec::new(),
         }
     }
 
@@ -73,13 +76,23 @@ where
     /// Returns an error if the timeout is exceeded.
     fn wait_ready(&self) -> Result<()> {
         let start = Instant::now();
+        let mut polls: u32 = 0;
 
         while !self.hrdy.is_high()? {
             if start.elapsed() > self.timeout {
                 return Err(Error::Timeout(self.timeout.as_millis() as u64));
             }
-            // Small yield to prevent busy-waiting
-            std::thread::yield_now();
+            // Command acks arrive within tens of microseconds, so spin briefly first.
+            // The IT8951 holds HRDY low for the whole waveform (200-500 ms) while a
+            // display update runs, so back off to sleeping rather than pinning a core.
+            polls += 1;
+            if polls < 64 {
+                std::thread::yield_now();
+            } else if polls < 256 {
+                std::thread::sleep(Duration::from_micros(50));
+            } else {
+                std::thread::sleep(Duration::from_micros(500));
+            }
         }
 
         Ok(())
@@ -140,6 +153,57 @@ where
             self.spi.set_speed(self.command_speed_hz)?;
         }
 
+        result
+    }
+
+    /// Writes packed pixel bytes as the IT8951 expects them in little-endian mode.
+    ///
+    /// Each pair of bytes forms one 16-bit word with the first byte in the low half,
+    /// so the SPI stream (MSB first) is the input with every byte pair swapped. The
+    /// data is copied once into a reusable transmit buffer, chunked to the spidev
+    /// buffer size, with a data preamble at the start of every chunk.
+    pub fn write_pixel_bytes(&mut self, data: &[u8]) -> Result<()> {
+        let use_fast_speed = self.data_speed_hz > 0 && self.command_speed_hz > 0;
+        if use_fast_speed {
+            self.spi.set_speed(self.data_speed_hz)?;
+        }
+
+        let result = self.write_pixel_bytes_inner(data);
+
+        if use_fast_speed {
+            self.spi.set_speed(self.command_speed_hz)?;
+        }
+
+        result
+    }
+
+    fn write_pixel_bytes_inner(&mut self, data: &[u8]) -> Result<()> {
+        // Preamble (2 bytes) + payload must fit in one spidev transfer (65536 bytes).
+        const MAX_CHUNK_BYTES: usize = 65534;
+
+        let mut tx = std::mem::take(&mut self.tx_buf);
+        let mut offset = 0;
+        let mut result = Ok(());
+        while offset < data.len() {
+            let chunk = &data[offset..(offset + MAX_CHUNK_BYTES).min(data.len())];
+            tx.clear();
+            tx.extend_from_slice(&PREAMBLE_WRITE_DATA.to_be_bytes());
+            for pair in chunk.chunks(2) {
+                if pair.len() == 2 {
+                    tx.push(pair[1]);
+                    tx.push(pair[0]);
+                } else {
+                    tx.push(0);
+                    tx.push(pair[0]);
+                }
+            }
+            result = self.wait_ready().and_then(|_| self.spi.transfer(&tx).map(|_| ()));
+            if result.is_err() {
+                break;
+            }
+            offset += chunk.len();
+        }
+        self.tx_buf = tx;
         result
     }
 
@@ -337,6 +401,32 @@ mod tests {
 
         let transfers = transport.spi.get_transfers();
         assert!(!transfers.is_empty());
+    }
+
+    #[test]
+    fn test_write_pixel_bytes_swaps_pairs_and_prefixes_preamble() {
+        let mut transport = setup_transport();
+
+        transport.write_pixel_bytes(&[0x11, 0x22, 0x33]).unwrap();
+
+        let transfers = transport.spi.get_transfers();
+        assert_eq!(transfers.len(), 1);
+        // preamble 0x0000, then (0x22,0x11), then odd trailing byte as (0x00,0x33)
+        assert_eq!(transfers[0], vec![0x00, 0x00, 0x22, 0x11, 0x00, 0x33]);
+    }
+
+    #[test]
+    fn test_write_pixel_bytes_chunks_with_preamble_each() {
+        let mut transport = setup_transport();
+
+        let data = vec![0xABu8; 65534 + 10];
+        transport.write_pixel_bytes(&data).unwrap();
+
+        let transfers = transport.spi.get_transfers();
+        assert_eq!(transfers.len(), 2);
+        assert_eq!(transfers[0].len(), 65536);
+        assert_eq!(transfers[1].len(), 12);
+        assert_eq!(&transfers[1][..2], &[0x00, 0x00]);
     }
 
     #[test]

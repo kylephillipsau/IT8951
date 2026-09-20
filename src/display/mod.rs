@@ -237,18 +237,8 @@ where
         // Start load image area
         self.load_image_area_start(&load_info, area)?;
 
-        // Convert bytes to 16-bit words for transfer
-        let mut words = Vec::with_capacity((data.len() + 1) / 2);
-        for chunk in data.chunks(2) {
-            let word = if chunk.len() == 2 {
-                ((chunk[1] as u16) << 8) | (chunk[0] as u16)
-            } else {
-                chunk[0] as u16
-            };
-            words.push(word);
-        }
-
-        self.transport.write_data_batch(&words)?;
+        // Stream the packed pixel bytes directly (byte-pair swapped for little-endian words)
+        self.transport.write_pixel_bytes(&data[..expected_size])?;
 
         // End load image
         self.transport.write_command(Command::LoadImageEnd)?;

@@ -21,12 +21,13 @@ use crate::hal::PinState;
 #[derive(Debug, Clone)]
 pub struct IT8951Builder {
     vcom: u16,
+    spi_data_hz: u32,
 }
 
 impl IT8951Builder {
     /// Creates a new builder with default values.
     pub fn new() -> Self {
-        Self { vcom: 1500 }
+        Self { vcom: 1500, spi_data_hz: speed::DATA_HZ }
     }
 
     /// Sets the VCOM voltage value.
@@ -48,6 +49,17 @@ impl IT8951Builder {
     }
 
     /// Validates the builder configuration.
+    /// Sets the SPI clock used for bulk pixel data (commands always use 1 MHz).
+    ///
+    /// The IT8951 datasheet specifies 24 MHz as the maximum. Higher clocks have been
+    /// measured byte-exact on a Raspberry Pi 4 with a Waveshare 9.7" HAT up to ~42 MHz,
+    /// but should be verified on each setup with
+    /// [`IT8951::verify_spi_integrity`](crate::IT8951::verify_spi_integrity).
+    pub fn spi_data_hz(mut self, hz: u32) -> Self {
+        self.spi_data_hz = hz;
+        self
+    }
+
     fn validate(&self) -> Result<()> {
         if self.vcom > 5000 {
             return Err(Error::InvalidVcom(self.vcom));
@@ -96,7 +108,7 @@ impl IT8951Builder {
         let reset = LinuxOutputPin::new(gpio_chip, pins::RST, PinState::High)?;
 
         let mut device = IT8951::new(spi, hrdy, cs, reset, self.vcom);
-        device.transport.set_speeds(speed::COMMAND_HZ, speed::DATA_HZ);
+        device.transport.set_speeds(speed::COMMAND_HZ, self.spi_data_hz);
         Ok(device)
     }
 

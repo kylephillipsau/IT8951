@@ -11,7 +11,7 @@ pub use builder::IT8951Builder;
 use crate::error::{Error, Result};
 use crate::hal::{InputPin, OutputPin, SpiTransfer};
 use crate::protocol::{Command, Register, Transport, UserCommand};
-use crate::types::DeviceInfo;
+use crate::types::{Area, DeviceInfo, PixelFormat};
 use std::time::Duration;
 
 /// Main IT8951 e-paper display controller.
@@ -211,6 +211,68 @@ where
     /// Puts the device into system run mode.
     pub fn run(&mut self) -> Result<()> {
         self.transport.write_command(Command::SysRun)
+    }
+
+    /// Overrides the SPI clock used for commands and for bulk pixel data.
+    ///
+    /// The IT8951 datasheet specifies 24 MHz as the maximum; higher data clocks may
+    /// work on short wiring but should be verified with [`read_memory`](Self::read_memory).
+    pub fn set_spi_speeds(&mut self, command_hz: u32, data_hz: u32) {
+        self.transport.set_speeds(command_hz, data_hz);
+    }
+
+    /// Loads a pseudo-random test pattern into the top rows of the image buffer at the
+    /// current data clock and reads it back, returning whether every word matched.
+    ///
+    /// Overwrites the first `rows` rows of the buffer (not the panel); call it before
+    /// the first real image load. Reads run at the command clock, so only the write
+    /// path is under test, which is the only path that runs at the data clock.
+    pub fn verify_spi_integrity(&mut self, rows: u16) -> Result<bool> {
+        let device_info = self
+            .device_info
+            .as_ref()
+            .ok_or_else(|| Error::Init("Device not initialized".to_string()))?;
+        let width = device_info.panel_width;
+        let base = device_info.img_buf_addr;
+        let n = width as usize * rows as usize;
+        let data: Vec<u8> = (0..n).map(|i| ((i * 7919) % 251) as u8).collect();
+        self.load_image(&data, &Area::new(0, 0, width, rows), PixelFormat::Bpp8)?;
+
+        // spidev transfers are capped at 64 KiB; read in 30 000-byte chunks.
+        const CHUNK_BYTES: usize = 30_000;
+        let mut offset = 0;
+        while offset < n {
+            let bytes = (n - offset).min(CHUNK_BYTES) & !1;
+            let words = self.read_memory(base + offset as u32, bytes / 2)?;
+            for (i, w) in words.iter().enumerate() {
+                let p = offset + i * 2;
+                let expect = ((data[p + 1] as u16) << 8) | data[p] as u16;
+                if *w != expect {
+                    return Ok(false);
+                }
+            }
+            offset += bytes;
+        }
+        Ok(true)
+    }
+
+    /// Reads `count` 16-bit words from the IT8951's memory starting at `addr`.
+    ///
+    /// Uses the memory burst read sequence (trigger, start, read, end). Useful for
+    /// verifying what actually landed in the image buffer after a `load_image`.
+    pub fn read_memory(&mut self, addr: u32, count: usize) -> Result<Vec<u16>> {
+        let args = [
+            (addr & 0xFFFF) as u16,
+            (addr >> 16) as u16,
+            (count & 0xFFFF) as u16,
+            (count >> 16) as u16,
+        ];
+        self.transport
+            .write_command_with_args(Command::MemBurstReadTrigger, &args)?;
+        self.transport.write_command(Command::MemBurstReadStart)?;
+        let words = self.transport.read_data_batch(count)?;
+        self.transport.write_command(Command::MemBurstEnd)?;
+        Ok(words)
     }
 
     /// Puts the device into standby mode (low power).
