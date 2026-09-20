@@ -196,7 +196,7 @@ pub mod speed {
     /// Higher speeds can cause communication failures
     pub const COMMAND_HZ: u32 = 1_000_000;
 
-    /// Speed for data transfers (12 MHz) - used for bulk pixel data
+    /// Speed for data transfers (24 MHz, the datasheet maximum) - used for bulk pixel data
     /// Requires core_freq=500 in /boot/firmware/config.txt for stable clock
     pub const DATA_HZ: u32 = 24_000_000;
 }

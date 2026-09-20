@@ -10,7 +10,7 @@ repository = "https://github.com/kylephillipsau/IT8951"
 documentation = "https://docs.rs/it8951"
 keywords = ["epaper", "eink", "display", "it8951", "waveshare"]
 categories = ["embedded", "hardware-support"]
-readme = "RUST_PORT.md"
+readme = "README.md"
 
 [dependencies]
 # Error handling
