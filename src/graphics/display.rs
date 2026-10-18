@@ -9,6 +9,20 @@ use crate::graphics::Framebuffer;
 use crate::hal::{InputPin, OutputPin, SpiTransfer};
 use crate::types::{Area, DisplayMode, PixelFormat};
 
+/// Pack 8bpp pixel data into 4bpp format.
+///
+/// Each 8bpp pixel's top 4 bits become a nibble. Two pixels are packed per byte:
+/// high nibble = first pixel, low nibble = second pixel.
+fn pack_8bpp_to_4bpp(data: &[u8]) -> Vec<u8> {
+    let mut packed = Vec::with_capacity((data.len() + 1) / 2);
+    for pair in data.chunks(2) {
+        let hi = pair[0] >> 4;
+        let lo = if pair.len() == 2 { pair[1] >> 4 } else { 0 };
+        packed.push((hi << 4) | lo);
+    }
+    packed
+}
+
 impl<SPI, HRDY, CS, RESET> IT8951<SPI, HRDY, CS, RESET>
 where
     SPI: SpiTransfer,
@@ -62,8 +76,9 @@ where
             )));
         }
 
-        // Load the framebuffer data to the display
-        self.load_image(framebuffer.data(), area, PixelFormat::Bpp8)?;
+        // Pack 8bpp framebuffer to 4bpp (IT8951 only uses top 4 bits anyway)
+        let packed = pack_8bpp_to_4bpp(framebuffer.data());
+        self.load_image(&packed, area, PixelFormat::Bpp4)?;
 
         // Optionally refresh the display
         if refresh {

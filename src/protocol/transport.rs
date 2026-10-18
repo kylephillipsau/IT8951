@@ -144,7 +144,7 @@ where
     }
 
     fn write_data_batch_inner(&mut self, data: &[u16]) -> Result<()> {
-        const MAX_CHUNK_WORDS: usize = 2047;
+        const MAX_CHUNK_WORDS: usize = 32767;
 
         self.wait_ready()?;
 
@@ -221,23 +221,23 @@ where
     /// Sends the command code followed by each argument with its own preamble.
     pub fn write_command_with_args(&mut self, cmd: Command, args: &[u16]) -> Result<()> {
         self.write_command(cmd)?;
-        if !args.is_empty() {
-            self.write_data_batch_inner(args)?;
+        for &arg in args {
+            self.write_data(arg)?;
         }
         Ok(())
     }
 
     /// Writes a user command with arguments.
     ///
-    /// Sends the command code followed by all arguments in a single data batch.
+    /// Sends the command code followed by each argument with its own preamble.
     pub fn write_user_command_with_args(
         &mut self,
         cmd: UserCommand,
         args: &[u16],
     ) -> Result<()> {
         self.write_user_command(cmd)?;
-        if !args.is_empty() {
-            self.write_data_batch_inner(args)?;
+        for &arg in args {
+            self.write_data(arg)?;
         }
         Ok(())
     }
