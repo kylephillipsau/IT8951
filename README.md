@@ -291,4 +291,5 @@ src/
 
 ## License
 
-MIT OR Apache-2.0
+MIT. The crate began as a port of Waveshare's C driver, which is also MIT;
+see [LICENSE](LICENSE).
